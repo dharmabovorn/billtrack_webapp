@@ -3,8 +3,10 @@
 class BillTrackerApp {
     constructor() {
         this.bills = [];
+        this.notes = [];
         this.monthlyIncome = 0;
         this.editingBillId = null;
+        this.editingNoteId = null;
         this.categories = [
             'Housing',
             'Utilities',
@@ -17,7 +19,9 @@ class BillTrackerApp {
         
         // DOM Elements
         this.billsList = document.getElementById('billsList');
+        this.notesList = document.getElementById('notesList');
         this.noBillsMessage = document.getElementById('noBillsMessage');
+        this.noNotesMessage = document.getElementById('noNotesMessage');
         this.monthlyIncomeEl = document.getElementById('monthlyIncome');
         this.totalExpensesEl = document.getElementById('totalExpenses');
         this.remainingBalanceEl = document.getElementById('remainingBalance');
@@ -61,11 +65,17 @@ class BillTrackerApp {
         
         // Set up event listeners
         this.setupEventListeners();
+        
+        // Render notes
+        this.renderNotes();
     }
     
     setupEventListeners() {
         // Add Bill button
         document.getElementById('addBillBtn').addEventListener('click', () => this.showAddBillModal());
+        
+        // Add Note button
+        document.getElementById('addNoteBtn').addEventListener('click', () => this.showAddNoteModal());
         
         // Edit Income button
         document.getElementById('editIncomeBtn').addEventListener('click', () => this.showEditIncomeModal());
@@ -136,6 +146,12 @@ class BillTrackerApp {
             this.bills = JSON.parse(savedBills);
         }
         
+        // Load notes from localStorage
+        const savedNotes = localStorage.getItem('notes');
+        if (savedNotes) {
+            this.notes = JSON.parse(savedNotes);
+        }
+        
         // Load monthly income from localStorage
         const savedIncome = localStorage.getItem('monthlyIncome');
         if (savedIncome) {
@@ -157,6 +173,9 @@ class BillTrackerApp {
         // Save bills to localStorage
         localStorage.setItem('bills', JSON.stringify(this.bills));
         
+        // Save notes to localStorage
+        localStorage.setItem('notes', JSON.stringify(this.notes));
+        
         // Save monthly income to localStorage
         localStorage.setItem('monthlyIncome', this.monthlyIncome.toString());
         
@@ -171,6 +190,9 @@ class BillTrackerApp {
         
         // Update the categories list in the modal
         this.renderCategoriesList();
+        
+        // Update notes display
+        this.renderNotes();
     }
     
     renderBills() {
@@ -697,6 +719,200 @@ class BillTrackerApp {
             this.saveData();
             this.showToast('Deleted', `Category "${category}" has been removed.`, 'info');
         }
+    }
+    
+    // Notes functionality
+    showAddNoteModal(note = null) {
+        this.editingNoteId = note ? note.id : null;
+        
+        // Create modal HTML if it doesn't exist
+        if (!document.getElementById('noteModal')) {
+            const modalHTML = `
+                <div class="modal fade" id="noteModal" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog">
+                        <div class="modal-content">
+                            <div class="modal-header">
+                                <h5 class="modal-title">${note ? 'Edit Note' : 'Add New Note'}</h5>
+                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                            </div>
+                            <div class="modal-body">
+                                <div class="mb-3">
+                                    <label for="noteTitle" class="form-label">Title</label>
+                                    <input type="text" class="form-control" id="noteTitle" value="${note ? note.title : ''}">
+                                </div>
+                                <div class="mb-3">
+                                    <label for="noteContent" class="form-label">Content</label>
+                                    <textarea class="form-control" id="noteContent" rows="5">${note ? note.content : ''}</textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                <button type="button" class="btn btn-primary" id="saveNoteBtn">Save Note</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.insertAdjacentHTML('beforeend', modalHTML);
+            
+            // Add event listener for save button
+            document.getElementById('saveNoteBtn').addEventListener('click', () => this.saveNote());
+        } else {
+            // Update existing modal
+            document.querySelector('#noteModal .modal-title').textContent = note ? 'Edit Note' : 'Add New Note';
+            document.getElementById('noteTitle').value = note ? note.title : '';
+            document.getElementById('noteContent').value = note ? note.content : '';
+        }
+        
+        // Show the modal
+        const modal = new bootstrap.Modal(document.getElementById('noteModal'));
+        modal.show();
+    }
+    
+    saveNote() {
+        const title = document.getElementById('noteTitle').value.trim();
+        const content = document.getElementById('noteContent').value.trim();
+        
+        if (!title || !content) {
+            this.showToast('Error', 'Please fill in both title and content', 'danger');
+            return;
+        }
+        
+        const noteData = {
+            id: this.editingNoteId || Date.now().toString(),
+            title,
+            content,
+            createdAt: this.editingNoteId ? 
+                (this.notes.find(n => n.id === this.editingNoteId)?.createdAt || new Date().toISOString()) : 
+                new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        
+        if (this.editingNoteId) {
+            // Update existing note
+            const index = this.notes.findIndex(n => n.id === this.editingNoteId);
+            if (index !== -1) {
+                this.notes[index] = noteData;
+                this.showToast('Success', 'Note updated successfully!', 'success');
+            }
+        } else {
+            // Add new note
+            this.notes.unshift(noteData);
+            this.showToast('Success', 'Note added successfully!', 'success');
+        }
+        
+        // Save and update UI
+        this.saveData();
+        
+        // Hide the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('noteModal'));
+        modal.hide();
+    }
+    
+    renderNotes() {
+        if (!this.notesList) return;
+        
+        this.notesList.innerHTML = '';
+        
+        if (this.notes.length === 0) {
+            this.notesList.innerHTML = `
+                <div class="text-muted text-center py-3" id="noNotesMessage">
+                    <i class="bi bi-journal-text d-block mb-2" style="font-size: 2rem; opacity: 0.5;"></i>
+                    No notes yet. Click "Add Note" to get started.
+                </div>`;
+            return;
+        }
+        
+        // Sort notes by last updated (newest first)
+        const sortedNotes = [...this.notes].sort((a, b) => 
+            new Date(b.updatedAt) - new Date(a.updatedAt)
+        );
+        
+        sortedNotes.forEach(note => {
+            const noteEl = document.createElement('div');
+            noteEl.className = 'note-card';
+            
+            // Format the date
+            const updatedAt = new Date(note.updatedAt);
+            const formattedDate = updatedAt.toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            
+            noteEl.innerHTML = `
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <h5 class="card-title">${this.escapeHtml(note.title)}</h5>
+                        <div class="dropdown note-actions">
+                            <button class="btn btn-sm btn-outline-secondary rounded-circle" type="button" 
+                                data-bs-toggle="dropdown" aria-expanded="false"
+                                aria-label="Note actions">
+                                <i class="bi bi-three-dots-vertical"></i>
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li>
+                                    <a class="dropdown-item edit-note" href="#" data-id="${note.id}">
+                                        <i class="bi bi-pencil me-2"></i>Edit
+                                    </a>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <a class="dropdown-item text-danger delete-note" href="#" data-id="${note.id}">
+                                        <i class="bi bi-trash me-2"></i>Delete
+                                    </a>
+                                </li>
+                            </ul>
+                        </div>
+                    </div>
+                    <div class="card-text">${this.escapeHtml(note.content).replace(/\n/g, '<br>')}</div>
+                </div>
+                <div class="card-footer">
+                    <small class="note-date">
+                        <i class="bi bi-clock me-1"></i>Updated ${formattedDate}
+                    </small>
+                </div>`;
+            
+            this.notesList.appendChild(noteEl);
+        });
+        
+        // Add event listeners for edit and delete buttons
+        document.querySelectorAll('.edit-note').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const noteId = e.currentTarget.getAttribute('data-id');
+                const note = this.notes.find(n => n.id === noteId);
+                if (note) {
+                    this.showAddNoteModal(note);
+                }
+            });
+        });
+        
+        document.querySelectorAll('.delete-note').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                const noteId = e.currentTarget.getAttribute('data-id');
+                if (confirm('Are you sure you want to delete this note?')) {
+                    this.deleteNote(noteId);
+                }
+            });
+        });
+    }
+    
+    deleteNote(noteId) {
+        this.notes = this.notes.filter(note => note.id !== noteId);
+        this.saveData();
+        this.showToast('Deleted', 'Note has been removed.', 'info');
+    }
+    
+    escapeHtml(unsafe) {
+        return unsafe
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
     }
     
     // Helper function to format dates
